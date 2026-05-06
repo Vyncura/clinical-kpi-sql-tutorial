@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
+import plotly as plt
 
 # --- 1. CONFIGURATION & PAGE SETUP ---
 st.set_page_config(page_title="Healthcare RCM Dashboard", layout="wide")
