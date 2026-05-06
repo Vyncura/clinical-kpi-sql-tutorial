@@ -1,83 +1,73 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
 
-# --- PAGE CONFIG ---
-st.set_page_config(page_title="Healthcare RCM Analytics Dashboard", layout="wide")
+# --- 1. CONFIGURATION & PAGE SETUP ---
+st.set_page_config(page_title="Healthcare RCM Dashboard", layout="wide")
 
-# --- CUSTOM CSS ---
-st.markdown("""
-    <style>
-    .main { background-color: #f5f7f9; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #e1e4e8; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- DATA LOADING ---
+# --- 2. DATA LOADING & PREPROCESSING (Synthetic) ---
 @st.cache_data
 def load_data():
-    # In a real app, this would be: pd.read_csv('medical_cost_personal_datasets.csv')
-    # Using a subset of the project data structure for the demo
-    url = "https://raw.githubusercontent.com/stedy/Machine-Learning-with-R-datasets/master/insurance.csv"
-    df = pd.read_csv(url)
+    # Creating a synthetic dataset for demonstration
+    np.random.seed(42)
+    data = {
+        'age': np.random.randint(18, 65, 500),
+        'bmi': np.random.uniform(18, 40, 500),
+        'children': np.random.randint(0, 5, 500),
+        'smoker': np.random.choice(['yes', 'no'], 500, p=[0.2, 0.8]),
+        'region': np.random.choice(['southwest', 'southeast', 'northwest', 'northeast'], 500),
+        'charges': np.random.uniform(5000, 50000, 500)
+    }
+    df = pd.DataFrame(data)
+    # Logic: Smokers have higher charges in this synthetic model
+    df.loc[df['smoker'] == 'yes', 'charges'] *= 2.5
     return df
 
 df = load_data()
 
-# --- SIDEBAR / FILTERS ---
+# --- 3. SIDEBAR FILTERS ---
 st.sidebar.header("Dashboard Filters")
-region_filter = st.sidebar.multiselect("Select Region:", options=df['region'].unique(), default=df['region'].unique())
-smoker_filter = st.sidebar.radio("Smoker Status:", options=['All', 'yes', 'no'], index=0)
+selected_region = st.sidebar.multiselect("Select Region", options=df['region'].unique(), default=df['region'].unique())
+selected_smoker = st.sidebar.radio("Smoker Status", options=['All', 'yes', 'no'])
 
-# Apply filters
-filtered_df = df[df['region'].isin(region_filter)]
-if smoker_filter != 'All':
-    filtered_df = filtered_df[filtered_df['smoker'] == smoker_filter]
+# Filter logic
+filtered_df = df[df['region'].isin(selected_region)]
+if selected_smoker != 'All':
+    filtered_df = filtered_df[filtered_df['smoker'] == selected_smoker]
 
-# --- HEADER ---
-st.title("🏥 Healthcare Revenue Cycle Management (RCM) Audit")
-st.markdown("**Objective:** Identifying revenue drivers and cost leakage through demographic and behavioral analysis.")
+# --- 4. KPI METRICS ---
+st.title("🏥 Healthcare Revenue Cycle Management")
+st.markdown("Analyzing medical costs, demographics, and risk factors.")
 
-# --- KEY METRICS (KPIs) ---
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3 = st.columns(3)
 with col1:
-    st.metric("Total Patients", f"{len(filtered_df):,}")
+    st.metric("Total Revenue", f"${filtered_df['charges'].sum():,.2f}")
 with col2:
-    st.metric("Avg. Charges", f"${filtered_df['charges'].mean():,.2f}")
+    st.metric("Avg. Charge per Patient", f"${filtered_df['charges'].mean():,.2f}")
 with col3:
-    st.metric("Total Revenue", f"${filtered_df['charges'].sum()/1e6:.2f}M")
-with col4:
-    st.metric("Avg. BMI", f"{filtered_df['bmi'].mean():.1f}")
+    st.metric("Patient Count", len(filtered_df))
 
+# --- 5. VISUALIZATION & INSIGHTS ---
 st.divider()
 
-# --- VISUALIZATIONS ---
-left_column, right_column = st.columns(2)
+c1, c2 = st.columns(2)
 
-with left_column:
+with c1:
+    st.subheader("Charges vs. BMI by Smoker Status")
+    fig1 = px.scatter(filtered_df, x="bmi", y="charges", color="smoker", 
+                      trendline="ols", template="plotly_white")
+    st.plotly_chart(fig1, use_container_width=True)
+
+with c2:
     st.subheader("Revenue Distribution by Region")
-    fig_region = px.sunburst(filtered_df, path=['region', 'smoker'], values='charges', 
-                             color='charges', color_continuous_scale='Viridis')
-    st.plotly_chart(fig_region, use_container_width=True)
+    fig2 = px.box(filtered_df, x="region", y="charges", color="region", points="all")
+    st.plotly_chart(fig2, use_container_width=True)
 
-with right_column:
-    st.subheader("BMI vs. Medical Charges")
-    fig_scatter = px.scatter(filtered_df, x="bmi", y="charges", color="smoker",
-                             hover_data=['age'], trendline="ols",
-                             title="Correlation: BMI & Charges (by Smoker Status)")
-    st.plotly_chart(fig_scatter, use_container_width=True)
+# --- 6. RAW DATA TABLE ---
+with st.expander("View Filtered Raw Data"):
+    st.dataframe(filtered_df.sort_values('charges', ascending=False))
 
-# --- DETAILED ANALYSIS ---
-st.subheader("Age-Based Revenue Cohorts")
-df['age_bracket'] = (df['age'] // 10) * 10
-age_cohorts = filtered_df.groupby('age_bracket')['charges'].mean().reset_index()
-fig_age = px.bar(age_cohorts, x='age_bracket', y='charges', 
-                 labels={'charges': 'Avg Revenue ($)', 'age_bracket': 'Age Group'},
-                 color='charges', color_continuous_scale='Blues')
-st.plotly_chart(fig_age, use_container_width=True)
-
-# --- FOOTER ---
-st.info("💡 **RCM Insight:** Smokers with a BMI over 30 represent the highest financial risk category for insurance providers.")
-st.markdown("--- ")
-st.caption("Support this project: Contributions help keep healthcare analytics tools free and open source.")
+# --- README FRIENDLY FOOTER ---
+st.markdown("---")
+st.caption("Deployment Tip: Ensure 'requirements.txt' includes: streamlit, pandas, numpy, plotly, and statsmodels.")
